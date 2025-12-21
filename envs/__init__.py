@@ -39,12 +39,13 @@ class TimeLimit(GymTimeLimit):
         assert (
             self._elapsed_steps is not None
         ), "Cannot call env.step() before calling reset()"
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, done, truncated, info = self.env.step(action)
         self._elapsed_steps += 1
         if self._elapsed_steps >= self._max_episode_steps:
             info["TimeLimit.truncated"] = not all(done)
+            truncated = True
             done = len(observation) * [True]
-        return observation, reward, done, info
+        return observation, reward, done, truncated, info
 
 
 class FlattenObservation(ObservationWrapper):
@@ -100,7 +101,7 @@ class _GymmaWrapper(MultiAgentEnv):
     def step(self, actions):
         """ Returns reward, terminated, info """
         actions = [int(a) for a in actions]
-        self._obs, reward, done, info = self._env.step(actions)
+        self._obs, reward, done, truncated, info = self._env.step(actions)
         self._obs = [
             np.pad(
                 o,
@@ -111,7 +112,7 @@ class _GymmaWrapper(MultiAgentEnv):
             for o in self._obs
         ]
 
-        return float(sum(reward)), all(done), {}
+        return float(sum(reward)), all(done) or truncated, {}
 
     def get_obs(self):
         """ Returns all agent observations in a list """
@@ -167,7 +168,7 @@ class _GymmaWrapper(MultiAgentEnv):
 
     def reset(self):
         """ Returns initial observations and states"""
-        self._obs = self._env.reset()
+        self._obs, _ = self._env.reset()
         self._obs = [
             np.pad(
                 o,

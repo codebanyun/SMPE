@@ -12,6 +12,7 @@ import numpy as np
 from operator import itemgetter 
 import gc
 import time
+import os
 
 
 class VAEController:
@@ -295,7 +296,7 @@ class VAEController:
                     reg_loss = 0
                     if self.args.use_w:
                         l2_lambda = self.args.l2_lambda
-                        l2_reg = th.tensor(0.)
+                        l2_reg = th.tensor(0., device=self.args.device)
                         for param in self.filters[agent_id].parameters():
                             l2_reg += th.norm(param)
                         reg_loss = l2_lambda * l2_reg
@@ -348,7 +349,7 @@ class VAEController:
 
     def add_intrinsic_rewards(self, batch: EpisodeBatch):
         time_dim = batch["obs"].shape[1]
-        new_rewards = th.zeros(self.args.batch_size, time_dim, self.n_agents)
+        new_rewards = th.zeros(self.args.batch_size, time_dim, self.n_agents, device=self.args.device)
 
         for agent_id in range(self.n_agents):
 
@@ -362,13 +363,13 @@ class VAEController:
             z_others = z_others.view(-1, self.state_embedding_shape)
             self.hash_z[agent_id].inc_hash(z_others)
             z_rewards = self.hash_z[agent_id].predict(z_others)
-            z_rewards = th.tensor(z_rewards)
+            z_rewards = th.tensor(z_rewards, device=self.args.device)
             z_rewards = z_rewards.view(self.args.batch_size, time_dim)
 
             obs = obs.view(-1, self.obs_dim)
             self.hash_obs[agent_id].inc_hash(obs)
             obs_rewards = self.hash_obs[agent_id].predict(obs)    
-            obs_rewards = th.tensor(obs_rewards)
+            obs_rewards = th.tensor(obs_rewards, device=self.args.device)
             obs_rewards = obs_rewards.view(self.args.batch_size, time_dim)            
 
             intr_rews_agent = self.args.z_rew_coeff * z_rewards + self.args.obs_rew_coeff * obs_rewards
@@ -388,7 +389,10 @@ class VAEController:
 
     def save_models(self, t_env, path=None):
         if path is None:
+            os.makedirs("saves", exist_ok=True)
             path = "saves/ed_" + str(t_env) + ".pth"
+        elif os.path.dirname(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
         th.save(self.agent_models.state_dict(), path)
         return
 
@@ -401,7 +405,10 @@ class VAEController:
 
     def save_filters(self, t_env, path=None):
         if path is None:
+            os.makedirs("saves", exist_ok=True)
             path = "saves/filters_" + str(t_env) + ".pth"
+        elif os.path.dirname(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
         th.save(self.filters.state_dict(), path)
         return
 
@@ -410,4 +417,4 @@ class VAEController:
             path = "saves/filters_" + str(t_env) + ".pth"
         self.filters.load_state_dict(th.load(path))
         return
-        
+

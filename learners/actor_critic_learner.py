@@ -27,10 +27,10 @@ class ActorCriticVLearner:
         self.critic_optimiser = Adam(params=self.critic_params, lr=args.lr)
 
         self.critic_w = critic_resigtry[args.critic_type](scheme, args)
-        self.target_critic_w = copy.deepcopy(self.critic)
+        self.target_critic_w = copy.deepcopy(self.critic_w)
 
-        self.critic_params_w = list(self.critic.parameters())
-        self.critic_optimiser_w = Adam(params=self.critic_params, lr=args.lr)
+        self.critic_params_w = list(self.critic_w.parameters())
+        self.critic_optimiser_w = Adam(params=self.critic_params_w, lr=args.lr)
 
         self.last_target_update_step = 0
         self.critic_training_steps = 0
@@ -275,6 +275,8 @@ class ActorCriticVLearner:
         self.mac.cuda()
         self.critic.cuda()
         self.target_critic.cuda()
+        self.critic_w.cuda()
+        self.target_critic_w.cuda()
         return
     
     def save_models(self, path):

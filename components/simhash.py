@@ -75,6 +75,10 @@ class HashCount:
         self.projection_matrix = np.random.normal(size=(self.obs_size, self.key_dim))       # A
 
     def compute_keys(self, obss):
+        if torch.is_tensor(obss):
+            obss = obss.detach().cpu().numpy()
+        elif isinstance(obss, list) and len(obss) > 0 and torch.is_tensor(obss[0]):
+             obss = [o.detach().cpu().numpy() for o in obss]
         binaries = np.sign(np.asarray(obss).dot(self.projection_matrix))
         keys = np.cast["int"](binaries.dot(self.mods_list)) % self.bucket_sizes
         return keys

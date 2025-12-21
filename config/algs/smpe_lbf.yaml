@@ -6,7 +6,7 @@ mask_before_softmax: True
 mac: "basic_mac"
 agent: "rnn"       
 
-use_cuda: False
+use_cuda: True
 
 runner: "parallel"
 

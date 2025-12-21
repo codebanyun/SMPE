@@ -22,7 +22,7 @@ GitPython==3.1.27
 google-auth==2.17.3
 google-auth-oauthlib==1.0.0
 grpcio==1.54.0
-gym==0.21.0
+gym==0.26.2
 -e git+https://github.com/IC3Net/IC3Net@69b7e0ce51a79def593abfef1a976f43e5e13f75#egg=ic3net_envs&subdirectory=ic3net-envs
 idna==2.7
 imageio==2.21.1
@@ -87,9 +87,9 @@ stable-baselines3==1.8.0
 tensorboard==2.13.0
 tensorboard-data-server==0.7.0
 tensorboard-logger==0.1.0
-torch==1.12.1+cu116
-torchaudio==0.12.1+cu116
-torchvision==0.13.1+cu116
+torch==1.12.1.post201
+torchaudio==0.12.1
+torchvision==0.13.1
 tornado==5.1.1
 typing_extensions==4.3.0
 urllib3==2.0.4
