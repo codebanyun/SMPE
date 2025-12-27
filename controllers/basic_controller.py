@@ -55,7 +55,7 @@ class BasicMAC:
             # inputs = inputs.view(self.args.batch_size, self.n_agents, -1)
 
             for agent_id in range(self.args.n_agents):
-                agent_predicted_z = self.vae_controller.forward(inputs[:, agent_id, :], agent_id, test_mode=True)
+                agent_predicted_z = self.vae_controller.forward(inputs[:, agent_id, :], agent_id, test_mode=True, ep_batch=ep_batch, t=t)
                 predicted_z[:, agent_id, :] = agent_predicted_z
             
             if self.args.use_detach:

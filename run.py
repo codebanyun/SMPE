@@ -229,7 +229,7 @@ def run_sequential(args, logger):
                     learner.mac.vae_controller.update_filters_targets()
 
                 if count % args.agent_vae_update_period == 0 and t_env <= args.stop_time_vae:      
-                    print("t_env:", t_env)    
+                    # print("t_env:", t_env)    
                     # Train agent's state modelling
                     if args.game == "rware":
                         learner.mac.vae_controller.train_agent_vaes(t_env)
