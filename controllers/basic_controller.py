@@ -21,11 +21,11 @@ class BasicMAC:
         # ep_batch["avail_actions"].shape: torch.Size([batch_size, Maxseqlen, num_agents, num_actions])
         # Only select actions for the selected batch elements in bs        
         avail_actions = ep_batch["avail_actions"][:, t_ep]
-        agent_outputs = self.forward(ep_batch, t_ep)
+        agent_outputs = self.forward(ep_batch, t_ep, t_env=t_env, test_mode=test_mode)
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
         return chosen_actions
 
-    def forward(self, ep_batch, t):
+    def forward(self, ep_batch, t, t_env=None, test_mode=False):
 
         if self.args.use_dynamics and self.args.use_z_inputs:
 
@@ -38,7 +38,7 @@ class BasicMAC:
                 actions_onehot = ep_batch["actions_onehot"][:, t-1, :, :]
                 rewards = ep_batch["reward"][:, t-1, :]
             
-            rewards = (rewards - self.vae_controller.rew_ms.mean) / th.sqrt(self.vae_controller.rew_ms.var)
+            rewards = (rewards - self.vae_controller.rew_ms.mean) / (th.sqrt(self.vae_controller.rew_ms.var) + 1e-8)
             rewards = rewards.view(-1, 1, 1).repeat(1, self.n_agents, 1)
 
             obs = ep_batch["obs"][:, t, :, :]
@@ -55,7 +55,14 @@ class BasicMAC:
             # inputs = inputs.view(self.args.batch_size, self.n_agents, -1)
 
             for agent_id in range(self.args.n_agents):
-                agent_predicted_z = self.vae_controller.forward(inputs[:, agent_id, :], agent_id, test_mode=True, ep_batch=ep_batch, t=t)
+                agent_predicted_z = self.vae_controller.forward(
+                    inputs[:, agent_id, :],
+                    agent_id,
+                    test_mode=test_mode,
+                    ep_batch=ep_batch,
+                    t=t,
+                    t_env=t_env,
+                )
                 predicted_z[:, agent_id, :] = agent_predicted_z
             
             if self.args.use_detach:

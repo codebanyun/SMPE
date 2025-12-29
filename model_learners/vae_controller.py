@@ -182,7 +182,7 @@ class VAEController:
         return itemgetter(*idx)(self.dataset)
 
 
-    def forward(self, inputs, agent_id, test_mode=False, ep_batch=None, t=None):
+    def forward(self, inputs, agent_id, test_mode=False, ep_batch=None, t=None, t_env=None):
         # Agent model's forward -> z
         if getattr(self.args, "use_dynamic_window", False):
             if ep_batch is not None and t is not None:
@@ -192,8 +192,21 @@ class VAEController:
                 mu_obs = self.obs_ms.mean
                 std_obs = th.sqrt(self.obs_ms.var) + 1e-8
                 obs_chunk = (obs_chunk - mu_obs) / std_obs
-                
-                _, z, _, _ = self.agent_models[agent_id].forward(obs_chunk, act_chunk, test_mode)
+
+                # Curriculum masking for backward window
+                if t_env is None:
+                    mask_prob = 0.0
+                else:
+                    max_t = self.args.t_max
+                    curr_t = t_env
+                    mask_prob = min(1.0, max(0.0, curr_t / (0.8 * max_t)))
+
+                _, z, _, _ = self.agent_models[agent_id].forward(
+                    obs_chunk,
+                    act_chunk,
+                    test_mode,
+                    mask_backward_prob=mask_prob,
+                )
             else:
                 # Fallback or error
                 # For now, try to proceed if inputs is enough (unlikely) or raise error
@@ -209,8 +222,12 @@ class VAEController:
         # ep_batch["obs"]: (B, T_max, N, D)
         # ep_batch["actions_onehot"]: (B, T_max, N, D)
         
-        start = t - 7
-        end = t + 8
+        # We need [t-14, ..., t, ..., t+8]
+        # Total length 23.
+        # t is at index 14.
+        
+        start = t - 14
+        end = t + 9 # Exclusive, so t+8 is included.
         
         obs = ep_batch["obs"][:, :, agent_id, :]
         act = ep_batch["actions_onehot"][:, :, agent_id, :]
@@ -263,8 +280,13 @@ class VAEController:
                     # states = states.reshape(-1, self.state_dim)
                     
                     if getattr(self.args, "use_dynamic_window", False):
-                        mask = big_batch["filled"][:, :-1, 0]
-                        valid_indices = th.nonzero(mask)
+                        # Only sample transitions where both (t) and (t+1) exist and are non-terminal.
+                        filled_t = big_batch["filled"][:, :-1, 0].float()
+                        filled_tp1 = big_batch["filled"][:, 1:, 0].float()
+                        terminated_t = big_batch["terminated"][:, :-1, 0].float()
+                        valid = filled_t * filled_tp1 * (1.0 - terminated_t)
+
+                        valid_indices = th.nonzero(valid)
                         if len(valid_indices) > 32:
                             idx = np.random.choice(len(valid_indices), 32, replace=False)
                             sampled_indices = valid_indices[idx]
@@ -312,10 +334,10 @@ class VAEController:
                         mu_state = self.state_ms.mean
                         std_state = th.sqrt(self.state_ms.var) + 1e-8
                         states = (states - mu_state) / std_state
-                        rewards = (rewards - self.rew_ms.mean) / th.sqrt(self.rew_ms.var)
+                        rewards = (rewards - self.rew_ms.mean) / (th.sqrt(self.rew_ms.var) + 1e-8)
                         
-                        obs_center = obs[:, 7, :]
-                        act_center = actions_onehot[:, 7, :]
+                        obs_center = obs[:, 14, :]
+                        act_center = actions_onehot[:, 14, :]
                         inputs_w = obs_center
                         if self.args.use_actions:
                             inputs_w = th.cat((inputs_w, act_center), dim=-1)
@@ -326,8 +348,15 @@ class VAEController:
                             w_i = self.filters[agent_id].forward(inputs_w)
                             w_i_targets = self.target_filters[agent_id].forward(inputs_w)
                             w_i_targets = w_i_targets.detach()
-                            
-                        z_others, _, _ = self.agent_models[agent_id].encoder.forward(obs, actions_onehot)
+                        
+                        # Calculate mask_backward_prob based on t_env
+                        # Curriculum: 0.0 at start, 1.0 at max_t_env (or earlier)
+                        # Let's say we want to reach 1.0 at 80% of training.
+                        max_t = self.args.t_max
+                        curr_t = t_env
+                        mask_prob = min(1.0, max(0.0, curr_t / (0.8 * max_t)))
+                        
+                        z_others, _, _ = self.agent_models[agent_id].encoder.forward(obs, actions_onehot, mask_backward_prob=mask_prob)
                         
                     else:
                         terminated = big_batch["terminated"][:, :].float()
