@@ -69,28 +69,9 @@ class SoftPoliciesSelector():
         return
 
     def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False):
-        # agent_inputs is expected to be action probabilities (already softmaxed).
-        # Always mask out unavailable actions.
-        masked_policies = agent_inputs.clone()
-        masked_policies[avail_actions == 0.0] = 0.0
-
-        if test_mode and self.test_greedy:
-            picked_actions = masked_policies.max(dim=2)[1]
-        else:
-            # Categorical(probs=...) requires at least one positive prob per row.
-            probs_sum = masked_policies.sum(dim=2, keepdim=True)
-            all_zero = probs_sum.squeeze(2) == 0
-            if all_zero.any():
-                # Fallback to uniform over available actions.
-                uniform = avail_actions.float()
-                uniform_sum = uniform.sum(dim=2, keepdim=True)
-                uniform = th.where(uniform_sum > 0, uniform / uniform_sum, th.full_like(uniform, 1.0 / uniform.size(2)))
-                masked_policies[all_zero] = uniform[all_zero]
-
-            m = Categorical(probs=masked_policies)
-            picked_actions = m.sample().long()
-
-        return picked_actions           # shape: (batch_size, num_agents)
+        m = Categorical(agent_inputs)
+        picked_actions = m.sample().long()
+        return picked_actions
 
 
 REGISTRY["soft_policies"] = SoftPoliciesSelector

@@ -83,7 +83,7 @@ class ActorCriticVLearner:
         # Compute forward passes for each agent for all parallel envs
         mac_out = []
         for t in range(batch.max_seq_length - 1):
-            agent_outs = self.mac.forward(batch, t=t, t_env=t_env, test_mode=False)
+            agent_outs = self.mac.forward(batch, t=t)
             mac_out.append(agent_outs)
         pi = th.stack(mac_out, dim=1)      # shape: (batch_size, maxseqlen, num_agents, num_actions)
 

@@ -6,7 +6,7 @@ mask_before_softmax: True
 mac: "basic_mac"
 agent: "rnn"       
 
-use_cuda: True
+use_cuda: False
 
 runner: "parallel"
 
@@ -80,3 +80,17 @@ z_rew_coeff: 0.1
 obs_rew_coeff: 0.
 true_rew_coeff: 1
 actions_loss_lambda: 0.0
+
+# --- Backward-window masking schedule (Dynamic Window / BiGRU) ---
+# mask_backward_prob will be annealed from start -> finish.
+# Defaults target: reach full masking (1.0) at t_env=4,000,000.
+mask_backward_schedule: square   # linear | cosine | sqrt | square | poly | exp | sigmoid
+mask_backward_start_t_env: 0
+mask_backward_full_t_env: 4000000
+mask_backward_start: 0.0
+mask_backward_finish: 1.0
+
+# Optional shaping parameters (only used by some schedules)
+mask_backward_power: 2.0         # for poly/power
+mask_backward_k: 10.0            # for exp/sigmoid
+mask_backward_midpoint: 0.5      # for sigmoid
