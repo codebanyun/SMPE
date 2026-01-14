@@ -28,8 +28,8 @@ class BasicMAC:
     def forward(self, ep_batch, t):
 
         if self.args.use_dynamics and self.args.use_z_inputs:
-
-            predicted_z = th.zeros((self.args.batch_size, self.args.n_agents, self.vae_controller.state_embedding_shape)).to(self.args.device)                     
+            bs = ep_batch.batch_size
+            predicted_z = th.zeros((bs, self.args.n_agents, self.vae_controller.state_embedding_shape)).to(self.args.device)                     
 
             if t == 0:
                 actions_onehot = th.zeros_like(ep_batch["actions_onehot"][:, t, :, :])
@@ -38,15 +38,17 @@ class BasicMAC:
                 actions_onehot = ep_batch["actions_onehot"][:, t-1, :, :]
                 rewards = ep_batch["reward"][:, t-1, :]
             
-            rewards = (rewards - self.vae_controller.rew_ms.mean) / th.sqrt(self.vae_controller.rew_ms.var)
+            rewards = (rewards - self.vae_controller.rew_ms.mean) / (th.sqrt(self.vae_controller.rew_ms.var) + 1e-8)
+            # rewards = th.clamp(rewards, min=-10.0, max=10.0)
             rewards = rewards.view(-1, 1, 1).repeat(1, self.n_agents, 1)
 
             obs = ep_batch["obs"][:, t, :, :]
             obs_mu = self.vae_controller.obs_ms.mean
             obs_std = th.sqrt(self.vae_controller.obs_ms.var) + 1e-8
             obs = (obs - obs_mu) / obs_std        # normalized observations   
+            # obs = th.clamp(obs, min=-10.0, max=10.0)
 
-            inputs = obs.view(self.args.batch_size, self.n_agents, -1)
+            inputs = obs.view(bs, self.n_agents, -1)
 
             # if self.args.use_actions:
             #     inputs = th.cat((inputs, actions_onehot), dim=-1)

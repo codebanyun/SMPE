@@ -52,6 +52,14 @@ class VAEController:
         self.build_hashers()
 
         # Build agent models
+        # Determine target state dimension for VAE
+        if getattr(self.args, "env", "gymma") == "sc2":
+            self.target_state_dim = self.state_dim
+            self.n_agents_others = self.n_agents
+        else:
+            self.target_state_dim = self.state_dim - self.obs_dim
+            self.n_agents_others = self.n_agents - 1
+            
         self.build_agent_models()
 
         if self.args.use_aux:
@@ -72,7 +80,7 @@ class VAEController:
 
 
     def build_filters(self):
-        self.filters = nn.ModuleList([Filter(self.obs_dim + self.actions_dim + self.rewards_dim, self.state_dim - self.obs_dim, self.args) \
+        self.filters = nn.ModuleList([Filter(self.obs_dim + self.actions_dim + self.rewards_dim, self.target_state_dim, self.args) \
                                            .to(self.args.device)
                                            for _ in range(self.n_agents)])
         self.filter_params = [ list(model.parameters()) for model in self.filters ]
@@ -81,7 +89,7 @@ class VAEController:
     
 
     def build_filters_targets(self):
-        self.target_filters = nn.ModuleList([Filter(self.obs_dim + self.actions_dim + self.rewards_dim, self.state_dim - self.obs_dim, self.args) \
+        self.target_filters = nn.ModuleList([Filter(self.obs_dim + self.actions_dim + self.rewards_dim, self.target_state_dim, self.args) \
                                            .to(self.args.device)
                                            for _ in range(self.n_agents)])
         self.update_filters_targets()
@@ -95,7 +103,7 @@ class VAEController:
     def build_agent_models(self):
         if self.args.use_actions:
             # Agents' models (with partial observability)
-            self.agent_models = nn.ModuleList([VAE(self.obs_dim, self.state_embedding_shape, self.state_dim - self.obs_dim, self.args) \
+            self.agent_models = nn.ModuleList([VAE(self.obs_dim, self.state_embedding_shape, self.target_state_dim, self.args, n_agents_others=self.n_agents_others) \
                                             .to(self.args.device)
                                             for _ in range(self.n_agents)])
             self.agent_params = [ list(model.parameters()) for model in self.agent_models ]
@@ -103,7 +111,7 @@ class VAEController:
         
         else:
             # Agents' models (with partial observability)
-            self.agent_models = nn.ModuleList([VAE(self.obs_dim, self.state_embedding_shape, self.state_dim - self.obs_dim, self.args) \
+            self.agent_models = nn.ModuleList([VAE(self.obs_dim, self.state_embedding_shape, self.target_state_dim, self.args, n_agents_others=self.n_agents_others) \
                                             .to(self.args.device)
                                             for _ in range(self.n_agents)])
             self.agent_params = [ list(model.parameters()) for model in self.agent_models ]
@@ -246,11 +254,15 @@ class VAEController:
                     mu_obs = self.obs_ms.mean
                     std_obs = th.sqrt(self.obs_ms.var) + 1e-8
                     obs = (obs - mu_obs) / std_obs
+                    # obs = th.clamp(obs, min=-10.0, max=10.0)
                     mu_state = self.state_ms.mean
                     std_state = th.sqrt(self.state_ms.var) + 1e-8
                     states = (states - mu_state) / std_state
+                    # states = th.clamp(states, min=-10.0, max=10.0)
                     next_obs = (next_obs - mu_obs) / std_obs
-                    rewards = (rewards - self.rew_ms.mean) / th.sqrt(self.rew_ms.var)      
+                    # next_obs = th.clamp(next_obs, min=-10.0, max=10.0)
+                    rewards = (rewards - self.rew_ms.mean) / (th.sqrt(self.rew_ms.var) + 1e-8)      
+                    # rewards = th.clamp(rewards, min=-10.0, max=10.0)
 
                     inputs_w = obs
                     if self.args.use_actions:
@@ -271,11 +283,12 @@ class VAEController:
                     z_others_filtered = z_others
                     predicted_states = self.agent_models[agent_id].decoder.forward(z_others_filtered)
 
-                    last_dim = states.shape[1]
-                    cut = int(last_dim/self.n_agents)
-                    states = th.cat((states[:, 0:agent_id*cut], states[:, (agent_id*cut+cut):]), dim=-1)
-                    actions_onehot_others = th.cat((actions_onehot_others[:, 0:agent_id*self.n_actions], 
-                                                    actions_onehot_others[:, (agent_id*self.n_actions+self.n_actions):]), dim=-1)
+                    if getattr(self.args, "env", "gymma") != "sc2":
+                        last_dim = states.shape[1]
+                        cut = int(last_dim/self.n_agents)
+                        states = th.cat((states[:, 0:agent_id*cut], states[:, (agent_id*cut+cut):]), dim=-1)
+                        actions_onehot_others = th.cat((actions_onehot_others[:, 0:agent_id*self.n_actions], 
+                                                        actions_onehot_others[:, (agent_id*self.n_actions+self.n_actions):]), dim=-1)
                     #assert states.shape == predicted_states.shape
 
                     if self.args.use_aux:
@@ -312,12 +325,19 @@ class VAEController:
 
                     self.agent_optimizers[agent_id].zero_grad()
                     loss.backward()
+                    
+                    if self.args.grad_norm_clip > 0:
+                        th.nn.utils.clip_grad_norm_(self.agent_params[agent_id], self.args.grad_norm_clip)
 
                     self.agent_optimizers[agent_id].step()
                     if self.args.use_aux:
+                        if self.args.grad_norm_clip > 0:
+                            th.nn.utils.clip_grad_norm_(self.aux_agent_params[agent_id], self.args.grad_norm_clip)
                         self.aux_optimizers[agent_id].step()
 
                     if self.args.use_w and t_env % self.args.period_filter_update == 0 and self.args.w_upd:
+                        if self.args.grad_norm_clip > 0:
+                            th.nn.utils.clip_grad_norm_(self.filter_params[agent_id], self.args.grad_norm_clip)
                         self.filter_optimizers[agent_id].step()    
 
                     loss = loss.detach()
@@ -335,7 +355,7 @@ class VAEController:
                     last_epoch_loss = loss.item()
                     last_agents_loss.append(last_epoch_loss)
                     last_epoch_kl = kl_loss__.item()
-                    last_agents_kl.append(kl_loss__)
+                    last_agents_kl.append(last_epoch_kl) # Fix: append item not tensor
                     if self.args.use_aux:
                             last_agents_aux.append(aux_loss.item())        
 
@@ -344,7 +364,14 @@ class VAEController:
             self.save_filters(t_env=t_env)
             self.load_models(t_env=t_env)
             self.load_filters(t_env=t_env)
-        return
+            
+        stats = {}
+        if len(last_agents_loss) > 0:
+            stats["agent_vae_loss"] = np.mean(last_agents_loss)
+            stats["agent_vae_kl"] = np.mean(last_agents_kl)
+            if self.args.use_aux:
+                stats["agent_vae_aux"] = np.mean(last_agents_aux)
+        return stats
         
 
     def add_intrinsic_rewards(self, batch: EpisodeBatch):
@@ -358,6 +385,7 @@ class VAEController:
             mu_obs = self.obs_ms.mean
             std_obs = th.sqrt(self.obs_ms.var) + 1e-8
             obs = (obs - mu_obs) / std_obs
+            obs = th.clamp(obs, min=-10.0, max=10.0)
             z_others = self.forward(obs, agent_id)
             z_others = z_others.detach()
             z_others = z_others.view(-1, self.state_embedding_shape)

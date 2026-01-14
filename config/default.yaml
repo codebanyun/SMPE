@@ -42,7 +42,7 @@ grad_norm_clip: 10 # Reduce magnitude of gradients above this L2 norm
 add_value_last_step: True
 actions_loss_lambda: 1  # Not used
 use_aux: False  # Not used
-use_detach: False # Not used
+use_detach: True # Not used
 use_actions: False # Not used
 use_rewards: False # Not used
 use_gumbel: False # Not used

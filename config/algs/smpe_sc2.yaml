@@ -1,0 +1,95 @@
+# --- Central-V specific parameters for SC2 ---
+game: "sc2"
+action_selector: "soft_policies"
+mask_before_softmax: True
+
+mac: "basic_mac"
+agent: "rnn"       
+
+use_cuda: False  # Set to True if GPU is available
+use_dynamic_window: False  # main branch does not have dynamic window
+runner: "parallel"
+
+# SC2 typically needs a larger buffer for stability
+buffer_size: 5000
+batch_size_run: 8
+batch_size: 32
+
+# Update intervals
+target_update_interval_or_tau: 200     # Hard update for SC2 is often more stable
+target_update_filter: 50000          
+period_filter_update: 2000              
+update_filter_critic: 1              
+stop_time_vae: 100000000000000
+
+obs_agent_id: True
+obs_last_action: False
+obs_individual_obs: False
+
+agent_output_type: "pi_logits"
+learner: "actor_critic_learner"
+entropy_coef: 0.02
+use_rnn: True
+standardise_returns: False
+standardise_rewards: True  
+q_nstep: 5    
+critic_type: "cv_critic"
+
+name: "smpe"
+
+use_dynamics: True
+use_w: True
+w_upd: True
+use_intrinsic: True    
+use_z_inputs: True
+use_w_critic: True 
+use_clip_weights: True
+
+clip_min: 0.3
+clip_max: 1
+
+hidden_dim: 128
+latent_dim: 32    
+
+dynamics_controller: "vae_controller"
+lr: 0.0005
+lr_state_vae: 0.0005
+lr_agent_model: 0.0005
+lr_filter: 0.0005
+lr_w_critic: 0.00005     
+
+state_epochs: 10             
+agent_epochs: 15            
+
+state_vae_batch_size: 128
+agent_vae_batch_size: 128
+
+state_vae_update_period: 2000   
+agent_vae_update_period: 2000   
+                
+t_max: 5050000  # Longer for SC2
+stop_train_state_vae: 550000000
+
+l2_lambda: 0.5
+lambda_rec: 0.1             
+kl_prior_agents_lambda: 0.001
+lambda_kl_loss_state: 0.1
+lambda_kl_loss_obs: 0.1      
+lambda_aux_loss: 1
+lambda_w_critic: 0.001         
+z_rew_coeff: 0.005  # SC2 is sensitive to intrinsic reward scale, start smaller
+obs_rew_coeff: 0.
+true_rew_coeff: 1
+actions_loss_lambda: 0.0
+
+# --- Backward-window masking schedule ---
+mask_backward_schedule: square
+mask_backward_start_t_env: 0
+mask_backward_full_t_env: 6000000
+mask_backward_start: 0.0
+mask_backward_finish: 1.0
+
+# Optional shaping parameters
+mask_backward_power: 2.0
+mask_backward_k: 10.0
+mask_backward_midpoint: 0.5
