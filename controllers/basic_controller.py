@@ -38,7 +38,7 @@ class BasicMAC:
                 actions_onehot = ep_batch["actions_onehot"][:, t-1, :, :]
                 rewards = ep_batch["reward"][:, t-1, :]
             
-            rewards = (rewards - self.vae_controller.rew_ms.mean) / th.sqrt(self.vae_controller.rew_ms.var)
+            rewards = (rewards - self.vae_controller.rew_ms.mean) / (th.sqrt(self.vae_controller.rew_ms.var) + 1e-8)
             rewards = rewards.view(-1, 1, 1).repeat(1, self.n_agents, 1)
 
             obs = ep_batch["obs"][:, t, :, :]

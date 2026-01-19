@@ -275,7 +275,9 @@ class SMPE2_Encoder(nn.Module):
         
         # 3. VAE
         mu = self.mu(z_encoded)
-        sigma = th.exp(0.5 * self.logvar(z_encoded))
+        l_var = self.logvar(z_encoded)
+        l_var = th.clamp(l_var, min=-20, max=10)
+        sigma = th.exp(0.5 * l_var)
         
         if test_mode:
             z = mu
@@ -286,10 +288,10 @@ class SMPE2_Encoder(nn.Module):
         return z, mu, sigma
 
 class SMPE2_VAE(nn.Module):
-    def __init__(self, obs_dim, act_dim, embedding_shape, output_dim, args):
+    def __init__(self, obs_dim, act_dim, embedding_shape, output_dim, args, n_agents_others=None):
         super(SMPE2_VAE, self).__init__()
         self.encoder = SMPE2_Encoder(args, obs_dim, act_dim, embedding_shape)
-        self.decoder = Decoder(embedding_shape, output_dim, args)
+        self.decoder = Decoder(embedding_shape, output_dim, args, n_agents_others=n_agents_others)
 
     def forward(self, obs_chunk, act_chunk, test_mode=False, mask_backward_prob=0.0):
         z, mu, sigma = self.encoder(obs_chunk, act_chunk, test_mode, mask_backward_prob)

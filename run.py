@@ -198,6 +198,8 @@ def run_sequential(args, logger):
     logger.console_logger.info("Beginning training for {} timesteps".format(args.t_max))
 
     count = 0
+    last_vae_update_t = 0
+    last_filter_target_update_t = 0
 
     while runner.t_env <= args.t_max:
 
@@ -224,20 +226,37 @@ def run_sequential(args, logger):
             count += 250
 
             if args.use_dynamics: 
-                
-                if args.use_w and count % args.target_update_filter == 0: 
-                    learner.mac.vae_controller.update_filters_targets()
+                # 对于 SC2 环境，使用基于环境步数 (t_env) 的稳定更新逻辑
+                if getattr(args, "env", "gymma") == "sc2":
+                    if args.use_w and (t_env - last_filter_target_update_t) >= args.target_update_filter:
+                        learner.mac.vae_controller.update_filters_targets()
+                        last_filter_target_update_t = t_env
 
-                if count % args.agent_vae_update_period == 0 and t_env <= args.stop_time_vae:      
-                    # print("t_env:", t_env)    
-                    # Train agent's state modelling
-                    if args.game == "rware":
-                        learner.mac.vae_controller.train_agent_vaes(t_env)
-                    else:
-                        learner.mac.vae_controller.train_agent_vaes(count)
-                    
+                    if (t_env - last_vae_update_t) >= args.agent_vae_update_period and t_env <= args.stop_time_vae:
+                        vae_stats = learner.mac.vae_controller.train_agent_vaes(t_env)
+                        for k, v in vae_stats.items():
+                            logger.log_stat(k, v, t_env)
+                        last_vae_update_t = t_env
+                else:
+                    # 对于 LBF 等其他环境，保持原有的基于 count 的逻辑（兼容 Run 40）
+                    if args.use_w and count % args.target_update_filter == 0: 
+                        learner.mac.vae_controller.update_filters_targets()
+
+                    if count % args.agent_vae_update_period == 0 and t_env <= args.stop_time_vae:      
+                        if args.game == "rware":
+                            vae_stats = learner.mac.vae_controller.train_agent_vaes(t_env)
+                        else:
+                            vae_stats = learner.mac.vae_controller.train_agent_vaes(count)
+                        
+                        if isinstance(vae_stats, dict):
+                            for k, v in vae_stats.items():
+                                logger.log_stat(k, v, t_env)
+                        
+                        last_vae_update_t = t_env
                 
-                if args.use_intrinsic:
+                # Logic to stop intrinsic reward in late stage
+                stop_intrinsic_t = getattr(args, "stop_intrinsic_t", float('inf'))
+                if args.use_intrinsic and (t_env <= stop_intrinsic_t):
                     new_rewards = learner.mac.vae_controller.add_intrinsic_rewards(episode_sample)
                 else:
                     new_rewards = None

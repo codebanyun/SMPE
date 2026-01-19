@@ -65,7 +65,9 @@ class ActorCriticVLearner:
 
         if self.args.standardise_rewards:
             self.rew_ms.update(rewards)
-            rewards = (rewards - self.rew_ms.mean) / th.sqrt(self.rew_ms.var)       # shape: (batch_size, maxseqlen-1, 1)
+            # Use a slightly larger epsilon (1e-4) or a stabilized version to prevent 
+            # excessive amplification of intrinsic rewards when environmental rewards are 0.
+            rewards = (rewards - self.rew_ms.mean) / (th.sqrt(self.rew_ms.var) + 1e-4)       # shape: (batch_size, maxseqlen-1, 1)
         
         # No experiences to train on in this minibatch
         if mask.sum() == 0:
@@ -146,10 +148,16 @@ class ActorCriticVLearner:
                 std_obs = th.sqrt(self.mac.vae_controller.obs_ms.var) + 1e-8
                 obs = (obs - mu_obs) / std_obs
                 weight = self.mac.vae_controller.filters[agent_id].forward(obs)
-                cut = obs.shape[-1]
-                padding_mat = th.ones_like(obs)
-                weight = th.cat((weight[:, :, 0:agent_id*cut], padding_mat, weight[:, :, (agent_id*cut):]), dim=-1)
-                weights.append(weight.unsqueeze(2))
+                
+                if getattr(self.args, "env", "gymma") == "sc2":
+                    # For SC2, weight already has state_dim 
+                    # and the state is not a simple concatenation of obs
+                    weights.append(weight.unsqueeze(2))
+                else:
+                    cut = obs.shape[-1]
+                    padding_mat = th.ones_like(obs)
+                    weight = th.cat((weight[:, :, 0:agent_id*cut], padding_mat, weight[:, :, (agent_id*cut):]), dim=-1)
+                    weights.append(weight.unsqueeze(2))
             weights = th.cat(weights, dim=2)
 
         inputs = []
@@ -175,8 +183,8 @@ class ActorCriticVLearner:
                 target_vals_w = target_vals_w.squeeze(3)
 
         if self.args.standardise_returns:
-            target_vals = target_vals * th.sqrt(self.ret_ms.var) + self.ret_ms.mean
-            target_vals_w = target_vals_w * th.sqrt(self.ret_ms.var) + self.ret_ms.mean
+            target_vals = target_vals * (th.sqrt(self.ret_ms.var) + 1e-8) + self.ret_ms.mean
+            target_vals_w = target_vals_w * (th.sqrt(self.ret_ms.var) + 1e-8) + self.ret_ms.mean
 
         # Compute n-step target returns
         target_returns = self.nstep_returns(rewards, mask, target_vals, self.args.q_nstep)
@@ -185,9 +193,9 @@ class ActorCriticVLearner:
 
         if self.args.standardise_returns:
             self.ret_ms.update(target_returns)
-            target_returns = (target_returns - self.ret_ms.mean) / th.sqrt(self.ret_ms.var)
+            target_returns = (target_returns - self.ret_ms.mean) / (th.sqrt(self.ret_ms.var) + 1e-8)
             if self.args.use_w and self.args.use_w_critic and t_env % self.args.update_filter_critic == 0:
-                target_returns_w = (target_returns_w - self.ret_ms.mean) / th.sqrt(self.ret_ms.var)
+                target_returns_w = (target_returns_w - self.ret_ms.mean) / (th.sqrt(self.ret_ms.var) + 1e-8)
 
         running_log = {
             "critic_loss": [],

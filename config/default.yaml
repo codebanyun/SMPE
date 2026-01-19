@@ -33,6 +33,10 @@ buffer_size: 32 # Size of the replay buffer
 lr: 0.0005 # Learning rate for agents
 optim_alpha: 0.99 # RMSProp alpha
 optim_eps: 0.00001 # RMSProp epsilon
+epsilon_start: 1.0
+epsilon_finish: 0.05
+epsilon_anneal_time: 100000
+evaluation_epsilon: 0.0
 use_w_critic: True # Flag opt
 lr_w_critic: 0.00001
 w_upd: True
@@ -42,13 +46,14 @@ grad_norm_clip: 10 # Reduce magnitude of gradients above this L2 norm
 add_value_last_step: True
 actions_loss_lambda: 1  # Not used
 use_aux: False  # Not used
-use_detach: False # Not used
+use_detach: True # Not used
 use_actions: False # Not used
 use_rewards: False # Not used
 use_gumbel: False # Not used
 use_clip_weights: False
 use_2layer_filter: False
 true_rew_coeff: 1
+stop_intrinsic_t: 100000000000000 # Default to a very large number
 save_period: 1000000
 
 # --- Agent parameters ---

@@ -73,5 +73,33 @@ class SoftPoliciesSelector():
         picked_actions = m.sample().long()
         return picked_actions
 
+class EpsilonGreedySoftPoliciesSelector():
+    def __init__(self, args):
+        self.args = args
+        self.schedule = DecayThenFlatSchedule(args.epsilon_start, args.epsilon_finish, args.epsilon_anneal_time,
+                                              decay="linear")
+        self.epsilon = self.schedule.eval(0)
+        self.test_greedy = getattr(args, "test_greedy", True)
+
+    def select_action(self, agent_inputs, avail_actions, t_env, test_mode=False):
+        self.epsilon = self.schedule.eval(t_env)
+
+        if test_mode and self.test_greedy:
+            picked_actions = agent_inputs.max(dim=2)[1]
+        else:
+            # agent_inputs is already softmaxed
+            B, A, _ = agent_inputs.shape
+            random_numbers = th.rand(B, A, device=agent_inputs.device)
+            pick_random = (random_numbers < self.epsilon).long()
+            
+            random_actions = Categorical(avail_actions.float()).sample().long()
+            greedy_actions = agent_inputs.max(dim=2)[1]
+            
+            picked_actions = pick_random * random_actions + (1 - pick_random) * greedy_actions
+            
+        return picked_actions
+
+REGISTRY["epsilon_greedy_soft"] = EpsilonGreedySoftPoliciesSelector
+
 
 REGISTRY["soft_policies"] = SoftPoliciesSelector
